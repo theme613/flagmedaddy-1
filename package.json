@@ -9,15 +9,21 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.7",
+    "@heroicons/react": "^2.2.0",
+    "ethers": "^6.15.0",
+    "next": "15.4.6",
     "react": "19.1.0",
-    "react-dom": "19.1.0",
-    "next": "15.4.6"
+    "react-dom": "19.1.0"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3",
+    "@nomicfoundation/hardhat-toolbox": "^6.1.0",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "dotenv": "^17.2.1",
     "eslint": "^9",
     "eslint-config-next": "15.4.6",
-    "@eslint/eslintrc": "^3"
+    "hardhat": "^2.26.2",
+    "tailwindcss": "^4"
   }
 }
