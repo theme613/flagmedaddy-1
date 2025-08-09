@@ -17,7 +17,8 @@ module.exports = {
       url: "https://testnet.sapphire.oasis.dev",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 23295,
-      gasPrice: 1000000000, // 1 gwei
+      gasPrice: 100000000000, // 100 gwei - higher for Oasis Sapphire
+      gas: 10000000, // 10M gas limit
     },
     sapphireMainnet: {
       url: "https://sapphire.oasis.dev",

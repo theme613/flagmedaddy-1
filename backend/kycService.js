@@ -1,3 +1,4 @@
+require('dotenv').config();
 const { ethers } = require('ethers');
 const crypto = require('crypto');
 const multer = require('multer');

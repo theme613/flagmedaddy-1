@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAccount, useDisconnect } from 'wagmi';
 import { AppProvider, useApp } from '../contexts/AppContext';
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -142,6 +142,48 @@ const WalletApp = () => {
   
   // Check if user has completed registration
   const hasUserProfile = userProfile && isProfileComplete;
+
+  // Auto-check if connected wallet is registered
+  useEffect(() => {
+    const checkRegistration = async () => {
+      if (isConnected && userAddress && !userProfile) {
+        try {
+          console.log('🔍 Checking if wallet is registered:', userAddress);
+          const response = await fetch(`http://localhost:3001/api/user/${userAddress}/status`);
+          const data = await response.json();
+          
+          if (data.success && data.data.isRegistered) {
+            console.log('✅ Wallet is registered! Auto-logging in...');
+            // Create profile object from API response
+            const profileData = {
+              name: data.data.username,
+              username: data.data.username,
+              age: data.data.age,
+              gender: data.data.gender,
+              isKYCVerified: data.data.isKYCVerified,
+              isActive: data.data.isActive,
+              createdAt: data.data.createdAt,
+              walletAddress: data.data.walletAddress
+            };
+            
+            // Set profile to trigger main app view
+            createProfile(profileData);
+            
+            // Show welcome message
+            setTimeout(() => {
+              alert(`🎉 Welcome back, ${data.data.username}!\n\nYour profile was loaded from the blockchain.\n${data.data.isKYCVerified ? '✅ KYC Verified' : '⏳ KYC Pending'}`);
+            }, 500);
+          } else {
+            console.log('👤 Wallet not registered - will show KYC form');
+          }
+        } catch (error) {
+          console.error('❌ Error checking wallet registration:', error);
+        }
+      }
+    };
+
+    checkRegistration();
+  }, [isConnected, userAddress, userProfile, createProfile]);
 
   // State for managing visible profiles
   const [visibleProfiles, setVisibleProfiles] = useState(mockUsers);
