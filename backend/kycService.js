@@ -119,7 +119,12 @@ class BlockchainService {
         'function getPublicProfile(address _user) external view returns (string username, uint256 age, string gender, bool isKYCVerified, bool isActive, uint256 createdAt)',
         'function getPrivateProfile(address _user) external view returns (string fullName, string bio, string[] interests, uint256 monthlySalary, string profileImageHash)',
         'function isRegistered(address _user) external view returns (bool)',
-        'function authorizedVerifiers(address) external view returns (bool)'
+        'function authorizedVerifiers(address) external view returns (bool)',
+        'function rateUser(address _userToRate, bool _isGreenFlag) external',
+        'function getMyFlags() external view returns (uint256 greenFlags, uint256 redFlags)',
+        'function getMyGreenFlaggers(uint256 _start, uint256 _limit) external view returns (address[] flaggers, string[] usernames, uint256[] timestamps)',
+        'function checkMutualMatch(address _user1, address _user2) external view returns (bool)',
+        'function getVerifiedActiveUsers(uint256 _start, uint256 _limit) external view returns (address[] addresses, string[] usernames)'
       ];
 
       this.contract = new ethers.Contract(this.contractAddress, contractABI, this.signer);
@@ -394,7 +399,8 @@ app.get('/api/user/:address/status', async (req, res) => {
     }
 
     // Get public profile
-    const publicProfile = await blockchainService.contract.getPublicProfile(address);
+    const normalizedAddress = ethers.getAddress(address);
+    const publicProfile = await blockchainService.contract.getPublicProfile(normalizedAddress);
     
     res.json({
       success: true,
@@ -402,7 +408,11 @@ app.get('/api/user/:address/status', async (req, res) => {
         isRegistered: true,
         isKYCVerified: publicProfile.isKYCVerified,
         username: publicProfile.username,
-        isActive: publicProfile.isActive
+        age: Number(publicProfile.age),
+        gender: publicProfile.gender,
+        isActive: publicProfile.isActive,
+        createdAt: Number(publicProfile.createdAt),
+        walletAddress: normalizedAddress
       }
     });
 
@@ -411,6 +421,155 @@ app.get('/api/user/:address/status', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to check user status',
+      error: error.message
+    });
+  }
+});
+
+// Rating system endpoints
+
+// Rate a user (green flag = like, red flag = dislike)
+app.post('/api/rate-user', async (req, res) => {
+  try {
+    const { raterAddress, userToRate, isGreenFlag } = req.body;
+
+    if (!raterAddress || !userToRate || typeof isGreenFlag !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: raterAddress, userToRate, isGreenFlag'
+      });
+    }
+
+    if (blockchainService.mockMode) {
+      return res.json({
+        success: true,
+        message: 'Mock mode: Rating would be stored',
+        data: { raterAddress, userToRate, isGreenFlag, mockMode: true }
+      });
+    }
+
+    // Normalize addresses
+    const normalizedRater = ethers.getAddress(raterAddress);
+    const normalizedRated = ethers.getAddress(userToRate);
+
+    // Call smart contract function
+    const tx = await blockchainService.contract.rateUser(normalizedRated, isGreenFlag);
+    const receipt = await tx.wait();
+
+    res.json({
+      success: true,
+      message: `${isGreenFlag ? 'Green flag' : 'Red flag'} submitted successfully`,
+      data: {
+        transactionHash: receipt.transactionHash,
+        blockNumber: receipt.blockNumber,
+        raterAddress: normalizedRater,
+        userToRate: normalizedRated,
+        isGreenFlag
+      }
+    });
+
+  } catch (error) {
+    console.error('Rating error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to submit rating',
+      error: error.message
+    });
+  }
+});
+
+// Get user's received flags (only they can see this)
+app.get('/api/user/:address/my-flags', async (req, res) => {
+  try {
+    const { address } = req.params;
+
+    if (blockchainService.mockMode) {
+      return res.json({
+        success: true,
+        data: { greenFlags: 0, redFlags: 0, mockMode: true }
+      });
+    }
+
+    const normalizedAddress = ethers.getAddress(address);
+    
+    // This would need to be called by the user themselves due to the onlyRegistered modifier
+    // For now, we'll return a placeholder response
+    res.json({
+      success: true,
+      data: {
+        greenFlags: 0,
+        redFlags: 0,
+        note: 'This endpoint requires direct contract interaction from the user'
+      }
+    });
+
+  } catch (error) {
+    console.error('Get flags error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get user flags',
+      error: error.message
+    });
+  }
+});
+
+// Get users for swiping (active verified users)
+app.get('/api/users-for-swiping', async (req, res) => {
+  try {
+    const { start = 0, limit = 10 } = req.query;
+
+    if (blockchainService.mockMode) {
+      return res.json({
+        success: true,
+        data: {
+          users: [],
+          mockMode: true,
+          message: 'Mock mode: No users available'
+        }
+      });
+    }
+
+    // Get verified active users from the contract
+    const result = await blockchainService.contract.getVerifiedActiveUsers(
+      parseInt(start), 
+      parseInt(limit)
+    );
+
+    const users = [];
+    for (let i = 0; i < result.addresses.length; i++) {
+      // Get additional profile data for each user
+      try {
+        const publicProfile = await blockchainService.contract.getPublicProfile(result.addresses[i]);
+        users.push({
+          address: result.addresses[i],
+          username: result.usernames[i],
+          age: Number(publicProfile.age),
+          gender: publicProfile.gender,
+          isKYCVerified: publicProfile.isKYCVerified,
+          isActive: publicProfile.isActive,
+          createdAt: Number(publicProfile.createdAt)
+        });
+      } catch (profileError) {
+        console.error('Error getting profile for', result.addresses[i], profileError);
+        // Skip this user if we can't get their profile
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        users,
+        total: users.length,
+        start: parseInt(start),
+        limit: parseInt(limit)
+      }
+    });
+
+  } catch (error) {
+    console.error('Get users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to get users for swiping',
       error: error.message
     });
   }

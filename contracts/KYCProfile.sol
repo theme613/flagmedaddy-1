@@ -34,12 +34,24 @@ contract KYCProfile {
         bool isVerified;
     }
 
+    // Rating/Flag data (confidential - users can't see flags they gave)
+    struct UserRating {
+        bool hasRated;
+        bool isGreenFlag; // true = green flag (like), false = red flag (dislike)
+        uint256 timestamp;
+    }
+
     // Mappings
     mapping(address => PublicProfile) public publicProfiles;
     mapping(address => PrivateProfile) private privateProfiles;
     mapping(address => KYCData) private kycData;
     mapping(address => bool) public isRegistered;
     mapping(address => mapping(address => bool)) private authorizedViewers;
+    
+    // Rating system mappings (confidential)
+    mapping(address => mapping(address => UserRating)) private userRatings; // rater => rated => rating
+    mapping(address => uint256) private greenFlagCount; // count of green flags received
+    mapping(address => uint256) private redFlagCount; // count of red flags received
 
     // Array to store all registered users for discovery
     address[] public registeredUsers;
@@ -54,6 +66,7 @@ contract KYCProfile {
     event ProfileUpdated(address indexed user, uint256 timestamp);
     event ViewerAuthorized(address indexed user, address indexed viewer, uint256 timestamp);
     event ViewerRevoked(address indexed user, address indexed viewer, uint256 timestamp);
+    event UserRated(address indexed rater, address indexed rated, bool isGreenFlag, uint256 timestamp);
 
     // Modifiers
     modifier onlyOwner() {
@@ -371,5 +384,128 @@ contract KYCProfile {
         return isRegistered[_user] && 
                publicProfiles[_user].isActive && 
                publicProfiles[_user].isKYCVerified;
+    }
+
+    // Rating system functions
+    
+    // Rate another user (green flag = like, red flag = dislike)
+    function rateUser(address _userToRate, bool _isGreenFlag) external onlyRegistered {
+        require(_userToRate != address(0), "Invalid user address");
+        require(_userToRate != msg.sender, "Cannot rate yourself");
+        require(isRegistered[_userToRate], "User to rate is not registered");
+        require(publicProfiles[_userToRate].isActive, "User to rate is not active");
+
+        // Check if user has already rated this person
+        UserRating storage existingRating = userRatings[msg.sender][_userToRate];
+        
+        if (existingRating.hasRated) {
+            // Update existing rating
+            if (existingRating.isGreenFlag != _isGreenFlag) {
+                // Rating changed, update counters
+                if (existingRating.isGreenFlag) {
+                    // Was green flag, now changing to red flag
+                    greenFlagCount[_userToRate]--;
+                    redFlagCount[_userToRate]++;
+                } else {
+                    // Was red flag, now changing to green flag
+                    redFlagCount[_userToRate]--;
+                    greenFlagCount[_userToRate]++;
+                }
+                existingRating.isGreenFlag = _isGreenFlag;
+            }
+            existingRating.timestamp = block.timestamp;
+        } else {
+            // New rating
+            userRatings[msg.sender][_userToRate] = UserRating({
+                hasRated: true,
+                isGreenFlag: _isGreenFlag,
+                timestamp: block.timestamp
+            });
+            
+            // Update counters
+            if (_isGreenFlag) {
+                greenFlagCount[_userToRate]++;
+            } else {
+                redFlagCount[_userToRate]++;
+            }
+        }
+
+        emit UserRated(msg.sender, _userToRate, _isGreenFlag, block.timestamp);
+    }
+
+    // Get flags received by a user (only the user themselves can see this)
+    function getMyFlags() external view onlyRegistered returns (
+        uint256 greenFlags,
+        uint256 redFlags
+    ) {
+        return (greenFlagCount[msg.sender], redFlagCount[msg.sender]);
+    }
+
+    // Get users who gave you green flags (matches) - only you can see this
+    function getMyGreenFlaggers(uint256 _start, uint256 _limit) external view onlyRegistered returns (
+        address[] memory flaggers,
+        string[] memory usernames,
+        uint256[] memory timestamps
+    ) {
+        // Count green flaggers first
+        uint256 greenFlaggers = 0;
+        for (uint256 i = 0; i < registeredUsers.length; i++) {
+            address flagger = registeredUsers[i];
+            if (userRatings[flagger][msg.sender].hasRated && 
+                userRatings[flagger][msg.sender].isGreenFlag) {
+                greenFlaggers++;
+            }
+        }
+
+        // Apply pagination
+        uint256 startIndex = 0;
+        uint256 collected = 0;
+        uint256 resultSize = 0;
+        
+        // Calculate result size with pagination
+        for (uint256 i = 0; i < registeredUsers.length && collected < _start + _limit; i++) {
+            address flagger = registeredUsers[i];
+            if (userRatings[flagger][msg.sender].hasRated && 
+                userRatings[flagger][msg.sender].isGreenFlag) {
+                if (collected >= _start) {
+                    resultSize++;
+                }
+                collected++;
+            }
+        }
+
+        // Collect the results
+        flaggers = new address[](resultSize);
+        usernames = new string[](resultSize);
+        timestamps = new uint256[](resultSize);
+        
+        uint256 resultIndex = 0;
+        collected = 0;
+        
+        for (uint256 i = 0; i < registeredUsers.length && resultIndex < resultSize; i++) {
+            address flagger = registeredUsers[i];
+            if (userRatings[flagger][msg.sender].hasRated && 
+                userRatings[flagger][msg.sender].isGreenFlag) {
+                if (collected >= _start) {
+                    flaggers[resultIndex] = flagger;
+                    usernames[resultIndex] = publicProfiles[flagger].username;
+                    timestamps[resultIndex] = userRatings[flagger][msg.sender].timestamp;
+                    resultIndex++;
+                }
+                collected++;
+            }
+        }
+
+        return (flaggers, usernames, timestamps);
+    }
+
+    // Check if two users have mutual green flags (match)
+    function checkMutualMatch(address _user1, address _user2) external view returns (bool) {
+        require(msg.sender == _user1 || msg.sender == _user2, "Can only check matches for yourself");
+        
+        return userRatings[_user1][_user2].hasRated && 
+               userRatings[_user1][_user2].isGreenFlag &&
+               userRatings[_user2][_user1].hasRated && 
+               userRatings[_user2][_user1].isGreenFlag;
     }
 } 

@@ -37,8 +37,8 @@
       ]
     },
     "/Users/angelphoon/Documents/flagmedaddy/contracts/KYCProfile.sol": {
-      "lastModificationDate": 1754711918756,
-      "contentHash": "655c79c74426eb785ccae9aee7b5bf04",
+      "lastModificationDate": 1754728796116,
+      "contentHash": "03ca454cf62ae0d8a06d87daf81f1fd6",
       "sourceName": "contracts/KYCProfile.sol",
       "solcConfig": {
         "version": "0.8.19",

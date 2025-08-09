@@ -158,12 +158,12 @@ const WalletApp = () => {
             const profileData = {
               name: data.data.username,
               username: data.data.username,
-              age: data.data.age,
-              gender: data.data.gender,
+              age: data.data.age || 25, // fallback for older profiles
+              gender: data.data.gender || 'Not specified',
               isKYCVerified: data.data.isKYCVerified,
               isActive: data.data.isActive,
-              createdAt: data.data.createdAt,
-              walletAddress: data.data.walletAddress
+              createdAt: data.data.createdAt || Date.now(),
+              walletAddress: data.data.walletAddress || userAddress
             };
             
             // Set profile to trigger main app view
@@ -185,9 +185,18 @@ const WalletApp = () => {
     checkRegistration();
   }, [isConnected, userAddress, userProfile, createProfile]);
 
+  // Fetch users for swiping when profile is complete
+  useEffect(() => {
+    if (hasUserProfile && userAddress) {
+      console.log('👥 User profile loaded, fetching users for swiping...');
+      fetchUsersForSwiping();
+    }
+  }, [hasUserProfile, userAddress]);
+
   // State for managing visible profiles
-  const [visibleProfiles, setVisibleProfiles] = useState(mockUsers);
+  const [visibleProfiles, setVisibleProfiles] = useState([]);
   const [sentVibes, setSentVibes] = useState(new Set()); // Track sent vibes
+  const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [showTransactions, setShowTransactions] = useState(false);
   
   // Mock transaction data (would be real in production)
@@ -206,31 +215,111 @@ const WalletApp = () => {
     }
   ];
 
-  // Handle vibe button click - send invitation
-  const handleVibeClick = (targetUser) => {
-    // Add to sent vibes set
-    setSentVibes(prev => new Set([...prev, targetUser.id]));
+  // Fetch users for swiping
+  const fetchUsersForSwiping = async () => {
+    if (!userAddress) return;
     
-    // In real app, this would send vibe request to blockchain/backend
-    // For now, simulate sending the invitation
-    console.log('Vibe sent to:', targetUser);
-    
-    // Show success message
-    alert(`💕 Vibe sent to ${targetUser.name}! They'll receive your invitation in their inbox.`);
-    
-    // Optional: Remove from visible profiles after sending vibe
-    // setVisibleProfiles(prev => prev.filter(user => user.id !== targetUser.id));
+    setLoadingProfiles(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/users-for-swiping?start=0&limit=20');
+      const data = await response.json();
+      
+      if (data.success) {
+        // Filter out the current user's own profile
+        const otherUsers = data.data.users.filter(user => 
+          user.address.toLowerCase() !== userAddress.toLowerCase()
+        );
+        setVisibleProfiles(otherUsers);
+        console.log('📱 Loaded users for swiping:', otherUsers.length);
+      } else {
+        console.error('Failed to fetch users:', data.message);
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    } finally {
+      setLoadingProfiles(false);
+    }
   };
 
-  // Handle nah button click - remove from suggestions
-  const handleNahClick = (targetUser) => {
-    // Remove the profile from visible suggestions
-    setVisibleProfiles(prev => prev.filter(user => user.id !== targetUser.id));
-    
-    console.log('Nah to:', targetUser);
-    
-    // Show brief feedback
-    // alert(`👎 ${targetUser.name} removed from your suggestions.`);
+  // Handle vibe button click - send green flag to blockchain
+  const handleVibeClick = async (targetUser) => {
+    try {
+      // Add to sent vibes set immediately for UI feedback
+      setSentVibes(prev => new Set([...prev, targetUser.address]));
+      
+      console.log('💚 Sending green flag to:', targetUser);
+      
+      const response = await fetch('http://localhost:3001/api/rate-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raterAddress: userAddress,
+          userToRate: targetUser.address,
+          isGreenFlag: true
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Green flag sent successfully:', data);
+        alert(`💕 Green flag sent to ${targetUser.username}! 🟢`);
+      } else {
+        console.error('Failed to send green flag:', data.message);
+        // Remove from sent vibes if failed
+        setSentVibes(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(targetUser.address);
+          return newSet;
+        });
+        alert(`❌ Failed to send green flag: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error sending green flag:', error);
+      // Remove from sent vibes if error
+      setSentVibes(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(targetUser.address);
+        return newSet;
+      });
+      alert('❌ Error sending green flag. Please try again.');
+    }
+  };
+
+  // Handle nah button click - send red flag to blockchain
+  const handleNahClick = async (targetUser) => {
+    try {
+      console.log('❤️‍🩹 Sending red flag to:', targetUser);
+      
+      const response = await fetch('http://localhost:3001/api/rate-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          raterAddress: userAddress,
+          userToRate: targetUser.address,
+          isGreenFlag: false
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Red flag sent successfully:', data);
+        // Remove the profile from visible suggestions
+        setVisibleProfiles(prev => prev.filter(user => user.address !== targetUser.address));
+        // Brief feedback - no alert for red flags to keep it smooth
+      } else {
+        console.error('Failed to send red flag:', data.message);
+        alert(`❌ Failed to send red flag: ${data.message}`);
+      }
+    } catch (error) {
+      console.error('Error sending red flag:', error);
+      alert('❌ Error sending red flag. Please try again.');
+    }
   };
 
   // If not connected, show wallet connection screen
@@ -367,7 +456,12 @@ const WalletApp = () => {
         </div>
 
         {/* User Profiles Grid */}
-        {visibleProfiles.length === 0 ? (
+        {loadingProfiles ? (
+          <div className="text-center py-12">
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-pink-500"></div>
+            <p className="text-gray-600 mt-4">Loading profiles from blockchain...</p>
+          </div>
+        ) : visibleProfiles.length === 0 ? (
           <div className="text-center py-16">
             <div className="text-8xl mb-6">🎉</div>
             <h2 className="text-3xl font-bold text-gray-800 mb-4">All Caught Up!</h2>
@@ -392,17 +486,17 @@ const WalletApp = () => {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {visibleProfiles.map((user) => (
-            <div key={user.id} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-pink-100 overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:scale-105">
+            <div key={user.address} className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-lg border border-pink-100 overflow-hidden hover:shadow-xl transition-all duration-300 transform hover:scale-105">
               {/* Profile Header */}
               <div className="relative">
                 <div className="bg-gradient-to-br from-pink-400 to-purple-500 h-32 flex items-center justify-center">
                   <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                    {user.avatar}
+                    {user.username ? user.username.charAt(0).toUpperCase() : '?'}
                   </div>
                 </div>
                 <div className="absolute top-4 right-4">
-                  <div className="bg-green-500 text-white px-2 py-1 rounded-full text-xs font-medium">
-                    ✓ Verified
+                  <div className={`${user.isKYCVerified ? 'bg-green-500' : 'bg-yellow-500'} text-white px-2 py-1 rounded-full text-xs font-medium`}>
+                    {user.isKYCVerified ? '✓ Verified' : '⏳ Pending'}
                   </div>
                 </div>
               </div>
@@ -410,7 +504,7 @@ const WalletApp = () => {
               {/* Profile Info */}
               <div className="p-6">
                 <div className="text-center mb-4">
-                  <h3 className="text-xl font-bold text-gray-800 mb-1">{user.name}</h3>
+                  <h3 className="text-xl font-bold text-gray-800 mb-1">{user.username}</h3>
                   <div className="flex items-center justify-center space-x-3 text-sm text-gray-600 mb-3">
                     <span className="flex items-center space-x-1">
                       <span className="text-pink-500">⚧</span>
@@ -419,51 +513,58 @@ const WalletApp = () => {
                     <span className="text-gray-300">•</span>
                     <span className="flex items-center space-x-1">
                       <span className="text-blue-500">🎂</span>
-                      <span>{user.ageGroup}</span>
+                      <span>{user.age} years</span>
                     </span>
+                  </div>
+                  <div className="text-xs text-gray-500 font-mono">
+                    {user.address.slice(0, 6)}...{user.address.slice(-4)}
                   </div>
                 </div>
 
                 {/* Bio */}
                 <div className="mb-4">
                   <p className="text-gray-700 text-sm leading-relaxed italic">
-                    "{user.bio}"
+                    "Looking for genuine connections on the blockchain! 💕"
                   </p>
                 </div>
 
                 {/* Interests */}
                 <div className="mb-4">
-                  <div className="flex flex-wrap gap-2">
-                    {user.interests.map((interest, index) => (
-                      <span key={index} className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-xs font-medium">
-                        {interest}
-                      </span>
-                    ))}
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-xs font-medium">
+                      Blockchain
+                    </span>
+                    <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-xs font-medium">
+                      Dating
+                    </span>
+                    <span className="bg-pink-100 text-pink-700 px-3 py-1 rounded-full text-xs font-medium">
+                      {user.gender}
+                    </span>
                   </div>
                 </div>
 
                 {/* Action Buttons */}
                 <div className="flex space-x-2">
-                  {sentVibes.has(user.id) ? (
+                  {sentVibes.has(user.address) ? (
                     <button 
                       disabled
                       className="flex-1 py-2 px-4 rounded-lg text-sm font-medium bg-gray-300 text-gray-500 cursor-not-allowed"
                     >
-                      ✅ Vibe Sent
+                      ✅ Green Flag Sent
                     </button>
                   ) : (
                     <button 
                       onClick={() => handleVibeClick(user)}
                       className="flex-1 py-2 px-4 rounded-lg text-sm font-medium bg-green-500 hover:bg-green-600 text-white transform hover:scale-105 active:scale-95 transition-all duration-200"
                     >
-                      👍 Vibe
+                      🟢 Green Flag
                     </button>
                   )}
                   <button 
                     onClick={() => handleNahClick(user)}
                     className="flex-1 bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded-lg transition-colors text-sm font-medium transform hover:scale-105 active:scale-95"
                   >
-                    👎 Nah
+                    🔴 Red Flag
                   </button>
                 </div>
               </div>
