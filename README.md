@@ -1,6 +1,6 @@
 # 💘 FlagMeDaddy - Dating App on Oasis Sapphire
 
-A decentralized dating application built on Oasis Sapphire blockchain with Metamask Wallet integration, featuring user verification, matching, and a unique flagging system for post-date reviews.
+Decentralized dating on Oasis! MetaMask integration, user verification, smart matching, and flag shady dates via unique post-review system.
 
 ## 🌟 Features
 
