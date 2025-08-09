@@ -110,11 +110,8 @@ This is a demo application for educational purposes. Use at your own risk. The s
 
 ## 🔮 Future Enhancements
 
-- [ ] Photo uploads with IPFS
 - [ ] Advanced matching algorithms
-- [ ] Chat functionality
 - [ ] Mobile app
 - [ ] Premium features
 - [ ] Community governance
-- [ ] Reputation system
 - [ ] Event organization
