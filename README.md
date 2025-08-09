@@ -4,12 +4,11 @@ A decentralized dating application built on Oasis Sapphire blockchain with Rose 
 
 ## 🌟 Features
 
-- **Rose Wallet Integration**: Secure login using Oasis Rose Wallet
 - **User Verification**: Smart contract-based profile verification system
 - **Matching System**: Connect with other verified users
 - **Flag System**: Submit red flags (bad) or green flags (good) after dates
 - **Review System**: 10-word maximum reviews with approval mechanism
-- **Privacy**: Flags are only visible after mutual approval
+- **Privacy**: Flags (review) are not visible to the person who get reviewed
 - **Community Review**: All flags are reviewed by the community
 
 ## 🏗️ Architecture
@@ -22,7 +21,7 @@ A decentralized dating application built on Oasis Sapphire blockchain with Rose 
 - Privacy controls for flag visibility
 
 ### Frontend Components
-- **WalletConnect**: Rose Wallet integration
+- **WalletConnect**: Metamask integration
 - **UserRegistration**: Profile creation
 - **Navigation**: App navigation and user status
 - **Matches**: View and interact with matches
@@ -40,7 +39,7 @@ A decentralized dating application built on Oasis Sapphire blockchain with Rose 
 
 ### Prerequisites
 
-1. **Rose Wallet**: Install [Rose Wallet](https://rosewallet.io) browser extension
+1. **Metamask Wallet**: Install [Metamask Wallet] browser extension
 2. **Node.js**: Version 16 or higher
 3. **npm**: Package manager
 
