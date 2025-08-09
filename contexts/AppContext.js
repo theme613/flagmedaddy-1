@@ -1,5 +1,5 @@
 import { createContext, useContext, useReducer } from 'react';
-import oasisService from '../utils/oasis';
+import kycService from '../utils/kycService';
 
 const AppContext = createContext();
 
@@ -61,26 +61,31 @@ export const AppProvider = ({ children }) => {
       dispatch({ type: 'SET_ERROR', payload: null }); // Clear any previous errors
       
       // Connect to MetaMask
-      const address = await oasisService.connectWallet();
+      const address = await kycService.connectWallet();
       dispatch({ type: 'CONNECT_WALLET', payload: address });
       
-      // Set contract address for Oasis Sapphire
-      const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || '0x93e1fa4fe8b563bab2a5dc7fd1b134c138984b1d';
-      console.log('Setting contract address:', contractAddress);
+      // Set contract address for KYC Profile on Oasis Sapphire
+      const contractAddress = process.env.NEXT_PUBLIC_KYC_CONTRACT_ADDRESS || '0x0000000000000000000000000000000000000000';
+      console.log('Setting KYC contract address:', contractAddress);
+      
+      if (contractAddress === '0x0000000000000000000000000000000000000000') {
+        console.warn('KYC contract address not set. Please deploy the contract and set NEXT_PUBLIC_KYC_CONTRACT_ADDRESS');
+        return;
+      }
       
       try {
-        await oasisService.setContractAddress(contractAddress);
-        console.log('Contract address set successfully');
+        kycService.setContractAddress(contractAddress);
+        console.log('KYC contract address set successfully');
       } catch (error) {
-        console.error('Failed to set contract address:', error);
-        throw new Error(`Failed to initialize contract: ${error.message}`);
+        console.error('Failed to set KYC contract address:', error);
+        throw new Error(`Failed to initialize KYC contract: ${error.message}`);
       }
       
       // Check if user is already registered on the blockchain
-      const isRegistered = await oasisService.isRegistered(address);
+      const isRegistered = await kycService.isRegistered(address);
       if (isRegistered) {
-        const profile = await oasisService.getUserProfile(address);
-        dispatch({ type: 'SET_USER_PROFILE', payload: profile });
+        const publicProfile = await kycService.getPublicProfile(address);
+        dispatch({ type: 'SET_USER_PROFILE', payload: publicProfile });
       }
     } catch (error) {
       dispatch({ type: 'SET_ERROR', payload: error.message });
@@ -90,12 +95,7 @@ export const AppProvider = ({ children }) => {
 
 
   const disconnectWallet = async () => {
-    try {
-      await oasisService.disconnect();
-      dispatch({ type: 'DISCONNECT_WALLET' });
-    } catch (error) {
-      dispatch({ type: 'SET_ERROR', payload: error.message });
-    }
+    dispatch({ type: 'DISCONNECT_WALLET' });
   };
 
   const createProfile = (profileData) => {

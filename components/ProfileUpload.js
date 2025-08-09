@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import oasisService from '../utils/oasis';
+import profileService from '../utils/profileService';
+import kycService from '../utils/kycService';
 
 const ProfileUpload = ({ onComplete, userAddress }) => {
   const [formData, setFormData] = useState({
     name: '',
     age: '',
+    gender: '',
     bio: '',
     interests: '',
     monthlySalary: '',
@@ -46,7 +48,7 @@ const ProfileUpload = ({ onComplete, userAddress }) => {
     setIsSubmitting(true);
 
     try {
-      console.log('Starting profile registration...');
+      console.log('Creating profile on blockchain...');
       console.log('Form data:', formData);
       console.log('User address:', userAddress);
 
@@ -57,39 +59,32 @@ const ProfileUpload = ({ onComplete, userAddress }) => {
         .filter(interest => interest.length > 0);
 
       console.log('Interests array:', interestsArray);
-      console.log('Monthly salary (cents):', parseFloat(formData.monthlySalary) * 100);
 
-      // Register user on the smart contract
-      const receipt = await oasisService.registerUser(
-        formData.name,
-        parseInt(formData.age),
-        formData.bio,
-        interestsArray,
-        parseFloat(formData.monthlySalary) * 100 // Convert to cents to avoid decimal issues
-      );
+      // Prepare profile data for blockchain
+      const profileData = {
+        name: formData.name,
+        age: parseInt(formData.age),
+        gender: formData.gender,
+        bio: formData.bio,
+        interests: interestsArray,
+        monthlySalary: parseFloat(formData.monthlySalary),
+        profileImage: formData.profileImage,
+        payslip: formData.payslip
+      };
 
-      console.log('Profile registered on blockchain:', receipt);
+      // Create profile on blockchain
+      const receipt = await profileService.createProfile(profileData);
+      console.log('Profile created on blockchain:', receipt);
 
-      // Get the user profile from the contract
-      const profile = await oasisService.getUserProfile(userAddress);
+      // Get the profile from blockchain to ensure it was saved correctly
+      const blockchainProfile = await profileService.getMyProfile();
+      console.log('Profile retrieved from blockchain:', blockchainProfile);
 
-      // Call the completion callback with profile data from blockchain
-      onComplete({
-        name: profile.name,
-        age: profile.age,
-        bio: profile.bio,
-        interests: profile.interests,
-        monthlySalary: profile.monthlySalary,
-        isVerified: profile.isVerified,
-        isActive: profile.isActive,
-        createdAt: profile.createdAt,
-        address: userAddress,
-        payslip: formData.payslip,
-        profileImage: formData.profileImage // Keep local file references
-      });
+      // Call the completion callback with blockchain profile data
+      onComplete(blockchainProfile);
     } catch (error) {
-      console.error('Profile registration failed:', error);
-      alert(`Profile registration failed: ${error.message}`);
+      console.error('Profile creation failed:', error);
+      alert(`Profile creation failed: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -138,12 +133,30 @@ const ProfileUpload = ({ onComplete, userAddress }) => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Bio
+            Gender *
+          </label>
+          <select
+            name="gender"
+            value={formData.gender}
+            onChange={handleInputChange}
+            required
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
+          >
+            <option value="">Select your gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Bio *
           </label>
           <textarea
             name="bio"
             value={formData.bio}
             onChange={handleInputChange}
+            required
             rows="3"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
             placeholder="Tell us about yourself..."
@@ -152,13 +165,14 @@ const ProfileUpload = ({ onComplete, userAddress }) => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Interests
+            Interests *
           </label>
           <input
             type="text"
             name="interests"
             value={formData.interests}
             onChange={handleInputChange}
+            required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
             placeholder="e.g., Travel, Music, Sports"
           />
@@ -202,26 +216,27 @@ const ProfileUpload = ({ onComplete, userAddress }) => {
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Profile Image
+            Profile Image *
           </label>
           <input
             type="file"
             accept="image/*"
             onChange={handleImageChange}
+            required
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-black"
           />
           <p className="text-xs text-gray-500 mt-1">
-            Upload a profile picture (optional)
+            Upload a profile picture (required)
           </p>
         </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
-        >
-          {isSubmitting ? 'Registering on Blockchain...' : 'Register on Blockchain'}
-        </button>
+                  <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200"
+          >
+            {isSubmitting ? 'Registering on Blockchain...' : 'Register on Blockchain'}
+          </button>
       </form>
 
       <div className="mt-4 text-center">
